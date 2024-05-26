@@ -167,3 +167,50 @@ def generate_linear_equations(
     
     return equations_str, solutions
 
+def build_expression(
+    min_terms: int = 1,
+    max_terms: int = 3,
+    num_range: int = 10,
+):
+    zero, __ = generate_sum_expressions(
+        min_terms=min_terms,
+        max_terms=max_terms,
+        num_range=num_range,
+        need_total_sum=0,
+    )
+    
+    expression_cpl, result_cpl = generate_sum_expressions(
+        min_terms=4,
+        max_terms=4,
+        num_range=20,
+        need_total_sum=None,
+    )
+
+    expression_simple, result_simple = generate_sum_expressions(
+        min_terms=1,
+        max_terms=2,
+        num_range=10,
+        need_total_sum=None,
+        minus=False,
+    )
+    expression = "(" + expression_simple +")+" + "(" + zero + ")*(" + expression_cpl + ")+" + "="
+    # none_expression = expression_simple + "(" + none_zero + ")*(" + expression_cpl + ")+" + "="
+
+    return expression, result_simple #, none_expression, result_cpl*result_none+result_simple
+
+def build_code(inputs, range: int = 10):
+    input_value = random.randint(0, range)
+
+    if inputs["type"] == "+":
+        result = input_value + int(inputs["number"])
+    elif inputs["type"] == "-":
+        result = input_value - int(inputs["number"])
+    elif inputs["type"] == "*":
+        result = input_value * int(inputs["number"])
+    elif inputs["type"] == "/":
+        result = input_value / int(inputs["number"])
+    else:
+        print(inputs["type"])
+        raise ValueError("Not a valid type")
+    
+    return inputs["code"], input_value, result

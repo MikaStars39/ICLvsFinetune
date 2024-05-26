@@ -5,58 +5,15 @@ from tqdm import tqdm
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from src.utils import get_precision
+
 from src.generate_data import (
-    generate_sum_expressions, 
+    build_expression,
+    build_code,
     generate_relation_problem, 
     generate_bool_expression,
     generate_linear_equations,
 )
-
-def get_precision(
-    precision: str,
-):
-    if precision == "fp16":
-        return torch.float16
-    elif precision == "bf16":
-        return torch.bfloat16
-    elif precision == "fp32":
-        return torch.float32
-    else:
-        raise ValueError("Not a valid data type")
-
-def build_expression():
-    zero, __ = generate_sum_expressions(
-        min_terms=1,
-        max_terms=3,
-        num_range=10,
-        need_total_sum=0,
-    )
-
-    none_zero, result_none = generate_sum_expressions(
-        min_terms=1,
-        max_terms=3,
-        num_range=10,
-        need_total_sum=None,
-    )
-    
-    expression_cpl, result_cpl = generate_sum_expressions(
-        min_terms=4,
-        max_terms=4,
-        num_range=20,
-        need_total_sum=None,
-    )
-
-    expression_simple, result_simple = generate_sum_expressions(
-        min_terms=1,
-        max_terms=2,
-        num_range=10,
-        need_total_sum=None,
-        minus=False,
-    )
-    expression = expression_simple + "(" + zero + ")*(" + expression_cpl + ")+" + "="
-    none_expression = expression_simple + "(" + none_zero + ")*(" + expression_cpl + ")+" + "="
-
-    return expression, result_simple, none_expression, result_cpl*result_none+result_simple
 
 def build_code(inputs, range: int = 10):
     input_value = random.randint(0, range)
@@ -327,7 +284,6 @@ def test_algebra(
         answer = "a = " + str(solutions["a"]) + ", b = "
         text_has_zero += question + "\n" + instruction + answer
 
-        # print(text_has_zero)
 
         inputs = tokenizer(text_has_zero, return_tensors="pt").to("cuda")
         outputs = model.generate(
@@ -339,7 +295,7 @@ def test_algebra(
         
         outputs = tokenizer.decode(outputs[0], skip_special_tokens=True)[len(text_has_zero):]
 
-        # (text_has_zero, outputs)
+        print(text_has_zero, outputs)
 
         if str(solutions["b"]) in outputs:
             count_has_zero += 1
@@ -431,7 +387,7 @@ if __name__ == "__main__":
             raise ValueError("Not a valid data type")
         
         model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=precision).to("cuda")
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
         with torch.no_grad():
             for shot_num in [0, 1, 2, 4, 8, 16, 32]:

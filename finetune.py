@@ -1,48 +1,75 @@
 import torch
-from transformers import GPTNeoForCausalLM, GPTNeoConfig, AutoTokenizer, Trainer, TrainingArguments, DataCollatorForLanguageModeling
+import os
+from transformers import (
+    GPTNeoForCausalLM, 
+    GPTNeoConfig, 
+    AutoTokenizer, 
+    Trainer, 
+    TrainingArguments, 
+    DataCollatorForLanguageModeling
+)
 from datasets import load_dataset
+from torch.distributed import barrier
+from functools import partial
 
-model_name = "/home/qingyu_yin/model/gpt-neo-1.3B"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = GPTNeoForCausalLM.from_pretrained(model_name)
-tokenizer.pad_token = tokenizer.eos_token
+def main():
 
-def tokenize_and_format(examples):
-    tokenized_inputs = tokenizer(examples["text"], truncation=True, padding="max_length", max_length=1024)
-    tokenized_inputs["labels"] = tokenized_inputs["input_ids"]
-    return tokenized_inputs
+    model_name = "/home/qingyu_yin/model/llama-2-7B-hf"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = GPTNeoForCausalLM.from_pretrained(model_name)
+    tokenizer.pad_token = tokenizer.eos_token
 
-dataset = load_dataset("/home/qingyu_yin/data/pg19-test", split="test")
-dataset = dataset.map(tokenize_and_format, batched=True, num_proc=16)
+    def tokenize_and_format(tokenizer, examples):
+        tokenized_inputs = tokenizer(examples["text"], truncation=True, padding="max_length", max_length=1024)
+        tokenized_inputs["labels"] = tokenized_inputs["input_ids"]
+        return tokenized_inputs
 
+    rank = int(os.environ.get('RANK', -1))
 
-# 设置训练参数
-training_args = TrainingArguments(
-    output_dir="./results",
-    overwrite_output_dir=True,
-    num_train_epochs=3,
-    per_device_train_batch_size=1,
-    per_device_eval_batch_size=1,
-    warmup_steps=500,
-    weight_decay=0.01,
-    logging_dir="./logs",
-    logging_steps=10,
-    save_steps=500,
-    save_total_limit=2,
-    gradient_checkpointing=True,
-    fp16=True,  # If you have a GPU with Tensor Cores
-)
+    if rank > 0:
+        barrier()
 
-# 创建 Trainer
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=dataset,
-)
+    dataset = load_dataset("json", data_files="data/ft_data.json", split="train").shuffle(seed=42)
+    dataset = dataset.map(partial(tokenize_and_format, tokenizer), batched=True, num_proc=16)
 
-# 开始训练
-trainer.train()
+    if rank == 0:
+        barrier()
 
-# 保存模型和分词器
-trainer.save_model("./gpt-neo-1.4B-finetuned-wikitext-103")
-tokenizer.save_pretrained("./gpt-neo-1.4B-finetuned-wikitext-103")
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    model.config.use_cache = False # gradient checkpoint
+
+    # 设置训练参数
+    training_args = TrainingArguments(
+        output_dir="./results",
+        overwrite_output_dir=True,
+        num_train_epochs=3,
+        per_device_train_batch_size=1,
+        per_device_eval_batch_size=1,
+        warmup_steps=100,
+        weight_decay=0,
+        logging_dir="./logs",
+        logging_steps=10,
+        learning_rate=1e-5,
+        save_steps=500,
+        save_total_limit=2,
+        gradient_checkpointing=True,
+        fp16=True,  # If you have a GPU with Tensor Cores
+    )
+
+    # 创建 Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=dataset,
+        data_collator=data_collator
+    )
+
+    # 开始训练
+    trainer.train()
+
+    # # 保存模型和分词器
+    # trainer.save_model("./gpt-neo-1.4B-finetuned-wikitext-103")
+    # tokenizer.save_pretrained("./gpt-neo-1.4B-finetuned-wikitext-103")
+
+if __name__ == "__main__":
+    main()
