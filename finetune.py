@@ -1,75 +1,97 @@
-import torch
+import copy
+import logging
 import os
-from transformers import (
-    GPTNeoForCausalLM, 
-    GPTNeoConfig, 
-    AutoTokenizer, 
-    Trainer, 
-    TrainingArguments, 
-    DataCollatorForLanguageModeling
-)
-from datasets import load_dataset
-from torch.distributed import barrier
+from dataclasses import dataclass, field
+from typing import Dict, Optional, Sequence
 from functools import partial
 
-def main():
+import torch
+import transformers
+from torch.utils.data import Dataset
+from transformers import Trainer, DataCollatorForLanguageModeling
+from datasets import load_dataset
+from torch.distributed import barrier
 
-    model_name = "/home/qingyu_yin/model/llama-2-7B-hf"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = GPTNeoForCausalLM.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token
+IGNORE_INDEX = -100
+DEFAULT_PAD_TOKEN = "[PAD]"
+DEFAULT_EOS_TOKEN = "</s>"
+DEFAULT_BOS_TOKEN = "<s>"
+DEFAULT_UNK_TOKEN = "<unk>"
 
-    def tokenize_and_format(tokenizer, examples):
-        tokenized_inputs = tokenizer(examples["text"], truncation=True, padding="max_length", max_length=1024)
-        tokenized_inputs["labels"] = tokenized_inputs["input_ids"]
-        return tokenized_inputs
 
+@dataclass
+class ModelArguments:
+    model_name_or_path: Optional[str] = field(default="facebook/opt-125m")
+
+
+@dataclass
+class DataArguments:
+    data_path: str = field(default=None, metadata={"help": "Path to the training data."})
+
+
+@dataclass
+class TrainingArguments(transformers.TrainingArguments):
+    cache_dir: Optional[str] = field(default=None)
+    optim: str = field(default="adamw_torch")
+    model_max_length: int = field(
+        default=512,
+        metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
+    )
+
+
+def tokenize_fn(tokenizer, example):
+    context_length = tokenizer.model_max_length
+    outputs = tokenizer(
+        example["text"],
+        truncation=True,
+        return_tensors="pt",
+        pad_to_multiple_of=context_length,
+        padding=True,
+    )
+    return {"input_ids": outputs["input_ids"].view(-1, context_length)}
+
+
+def train():
+    parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+    )
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        model_max_length=training_args.model_max_length,
+        padding_side="right",
+        use_fast=False,
+    )
+    
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # process data
     rank = int(os.environ.get('RANK', -1))
-
+    print("Now processing data")
     if rank > 0:
         barrier()
-
-    dataset = load_dataset("json", data_files="data/ft_data.json", split="train").shuffle(seed=42)
-    dataset = dataset.map(partial(tokenize_and_format, tokenizer), batched=True, num_proc=16)
-
+    dataset = load_dataset("json", data_files=data_args.data_path, split="train").shuffle(42)
+    dataset = dataset.map(partial(tokenize_fn, tokenizer), batched=True, num_proc=32)
     if rank == 0:
         barrier()
-
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    model.config.use_cache = False # gradient checkpoint
 
-    # 设置训练参数
-    training_args = TrainingArguments(
-        output_dir="./results",
-        overwrite_output_dir=True,
-        num_train_epochs=3,
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
-        warmup_steps=100,
-        weight_decay=0,
-        logging_dir="./logs",
-        logging_steps=10,
-        learning_rate=1e-5,
-        save_steps=500,
-        save_total_limit=2,
-        gradient_checkpointing=True,
-        fp16=True,  # If you have a GPU with Tensor Cores
-    )
-
-    # 创建 Trainer
+    # train
     trainer = Trainer(
-        model=model,
+        model=model, 
+        tokenizer=tokenizer, 
         args=training_args,
         train_dataset=dataset,
-        data_collator=data_collator
+        data_collator=data_collator,
     )
-
-    # 开始训练
     trainer.train()
+    trainer.save_state()
+    trainer.save_model(output_dir=training_args.output_dir)
 
-    # # 保存模型和分词器
-    # trainer.save_model("./gpt-neo-1.4B-finetuned-wikitext-103")
-    # tokenizer.save_pretrained("./gpt-neo-1.4B-finetuned-wikitext-103")
 
 if __name__ == "__main__":
-    main()
+    train()

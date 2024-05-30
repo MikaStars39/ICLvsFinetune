@@ -50,14 +50,11 @@ def test_expression(
         text_has_zero = prompt
         text_no_zero = prompt
         for __ in range(shot_num):
-            expression_has_zero, result_has_zero, expression_no_zero, result_no_zero = build_expression()
+            expression_has_zero, result_has_zero = build_expression()
             text_has_zero += expression_has_zero + str(result_has_zero) + " \n "
-            text_no_zero += expression_no_zero + str(result_no_zero) + " \n "
         text_has_zero += instruction
-        text_no_zero += instruction
-        expression_has_zero, result_has_zero, expression_no_zero, result_no_zero = build_expression()
+        expression_has_zero, result_has_zero = build_expression()
         text_has_zero += expression_has_zero
-        text_no_zero += expression_has_zero
 
         inputs = tokenizer(text_has_zero, return_tensors="pt").to("cuda")
         outputs = model.generate(
