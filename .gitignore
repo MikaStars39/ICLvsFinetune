@@ -4,3 +4,5 @@ wandb
 image
 src/__pycache__
 data
+result
+*.json
