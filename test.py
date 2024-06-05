@@ -70,25 +70,9 @@ def test_expression(
 
         if str(result_has_zero) in outputs:
             count_has_zero += 1
-        
-        inputs = tokenizer(text_no_zero, return_tensors="pt").to("cuda")
-        outputs = model.generate(
-            inputs["input_ids"], 
-            max_new_tokens = generation_len, 
-            num_return_sequences=1, 
-            pad_token_id=tokenizer.eos_token_id
-            )
-        
-        outputs = tokenizer.decode(outputs[0], skip_special_tokens=True)[len(text_no_zero):]
-
-        # print(text_no_zero, outputs)
-
-        if str(result_has_zero) in outputs:
-            count_no_zero += 1
 
     print("shot num:", shot_num)
     print(count_has_zero/test_len)
-    print(count_no_zero/test_len)
 
     return count_has_zero/test_len
 
@@ -97,7 +81,7 @@ def test_code(
     test_len: int = 99,
     shot_num: int = 5,
     generation_len: int = 2,
-    data_name_or_path: str = "../data/code.json"
+    data_name_or_path: str = "data/code.json"
 ):
     prompt = "Now you need to give me the printed result after running this python code . Here are some examples: \n"
     hint = "The code is: \n"
@@ -170,10 +154,10 @@ def test_relation(
     model, tokenizer, precision,
     test_len: int = 99,
     shot_num: int = 5,
-    generation_len: int = 2,
+    generation_len: int = 4,
 ):
 
-    prompt = "Here are some cities expressed as A, B, C, etc. I will show some connection relations, and you need to tell me if city A and city Z are connected. Here are some examples: \n"
+    prompt = "Here are some cities expressed as A, B, C, etc. I will show some connection relations, and you need to tell me if city A and city Z are connected (Answer True or False). Here are some examples: \n"
     instruction = " So 'the city A and Z is connected' is "
     answer = ""
 
@@ -198,11 +182,12 @@ def test_relation(
             pad_token_id=tokenizer.eos_token_id
             )
         
+        print(text_has_zero, tokenizer.decode(outputs[0], skip_special_tokens=True))
         outputs = tokenizer.decode(outputs[0], skip_special_tokens=True)[len(text_has_zero):]
 
-        # print(text_has_zero, outputs)
-
         if str(answer) in outputs:
+            count_has_zero += 1
+        elif str(int(answer)) in outputs:
             count_has_zero += 1
 
     print("shot num:", shot_num)
@@ -363,6 +348,7 @@ if __name__ == "__main__":
     parser.add_argument("--precision", type=str, default="fp16")
     parser.add_argument("--len", type=int, default=16) 
     parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--shot_num", type=int, default=32)
     args = parser.parse_args()
 
     precision = get_precision(args.precision)
@@ -387,7 +373,9 @@ if __name__ == "__main__":
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
         with torch.no_grad():
-            for shot_num in [0, 1, 2, 4, 8, 16, 32]:
+            for shot_num in [i for i in range(33)]:
+                if shot_num > args.shot_num:
+                    break
                 test(
                     model=model,
                     tokenizer=tokenizer,

@@ -63,7 +63,7 @@ def train():
         model_args.model_name_or_path,
         model_max_length=training_args.model_max_length,
         padding_side="right",
-        use_fast=False,
+        use_fast=True,
     )
     
     if tokenizer.pad_token is None:
