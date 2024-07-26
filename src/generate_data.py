@@ -29,8 +29,6 @@ def generate_sum_expressions(
         expression = ''.join(terms)
     return expression, need_total_sum
 
-import random
-
 def generate_boolean_expression(num_terms=3):
     operators = ['and', 'or']
     values = ['True', 'False']
@@ -56,6 +54,7 @@ def generate_bool_expression(
     and_false: bool = False,
     or_true: bool = False,
     randoms: bool = False,
+    need_false: bool = False,
 ):
     if and_false == False and or_true == False and randoms == False:
         choice = random.choice(['False', 'True'])
@@ -84,11 +83,19 @@ def generate_bool_expression(
         expression_str = "(" + expression_str + ")" + " and False"
     elif or_true:
         expression_str = expression_str + ' or True'
+    
+    if need_false:
+        choice = random.choice(['False', 'True'])
+        if choice == "False":
+            expression_str = "(" + expression_str + ")" + " or False"
+        else:
+            expression_str = "(" + expression_str + ")" + " and True"
 
     return expression_str, eval(expression_str)
 
 def generate_relation_problem(
     n: int = 10,
+    need_false: bool = False,
 ):
     # Generate random cities excluding A and Z
     cities = [chr(i) for i in range(65, 65 + n) if chr(i) not in ['A', 'Z']]
@@ -102,9 +109,12 @@ def generate_relation_problem(
     # Randomly connect other cities
     for i in range(len(cities) - 1):
         connections.append((cities[i], cities[i + 1]))
-    
+    if need_false:
+        connections.pop()
     # Randomly decide if A should be connected to Z through the point A is connected to
-    if random.choice([True, False]):
+    if need_false:
+        answer = False
+    elif random.choice([True, False]):
         connections.append((a_connection, 'Z'))
         answer = True
     else:
@@ -171,6 +181,7 @@ def build_expression(
     min_terms: int = 1,
     max_terms: int = 3,
     num_range: int = 10,
+    need_false: bool = False,
 ):
     zero, __ = generate_sum_expressions(
         min_terms=min_terms,
@@ -178,11 +189,18 @@ def build_expression(
         num_range=num_range,
         need_total_sum=0,
     )
+
+    none_zero, result_zero = generate_sum_expressions(
+        min_terms=min_terms,
+        max_terms=max_terms,
+        num_range=num_range,
+        need_total_sum=None,
+    )
     
     expression_cpl, result_cpl = generate_sum_expressions(
         min_terms=4,
         max_terms=4,
-        num_range=20,
+        num_range=10,
         need_total_sum=None,
     )
 
@@ -193,10 +211,15 @@ def build_expression(
         need_total_sum=None,
         minus=False,
     )
-    expression = "(" + expression_simple +")+" + "(" + zero + ")*(" + expression_cpl + ")+" + "="
-    # none_expression = expression_simple + "(" + none_zero + ")*(" + expression_cpl + ")+" + "="
+    
+    if need_false:
+        expression = "(" + expression_simple +")+"  + "(" + none_zero + ")*(" + expression_cpl + ")" + "="
+        result = result_cpl * result_zero + result_simple
+    else:
+        expression = "(" + expression_simple +")+" + "(" + zero + ")*(" + expression_cpl + ")" + "="
+        result = result_simple
 
-    return expression, result_simple #, none_expression, result_cpl*result_none+result_simple
+    return expression, result
 
 def build_code(inputs, range: int = 10):
     input_value = random.randint(0, range)

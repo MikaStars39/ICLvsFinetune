@@ -31,24 +31,26 @@ def generate_training_dataset(
     instruction = " So 'the city A and Z is connected' is "
     for _ in range(example_number):
         question, answer = generate_relation_problem()
+        answer = "True" if answer==1 else "False"
         all_data.append(question + "\n" + instruction + str(answer))
 
     # generate boolean
     instruction = " The result is: "
     for _ in range(example_number):
         question, answer = generate_bool_expression(randoms=True)
-        all_data.append(question + "\n" + instruction + ('1' if answer else '0'))
-
-    # generate algebre
-    instruction = " The solutions are: "
-    for _ in range(example_number):
-        question, solutions = generate_linear_equations()
-        answer = "a = " + str(solutions["a"]) + ", b = " + str(solutions["b"])
+        answer = "True" if answer==1 else "False"
         all_data.append(question + "\n" + instruction + answer)
+
+    # # generate algebre
+    # instruction = " The solutions are: "
+    # for _ in range(example_number):
+    #     question, solutions = generate_linear_equations()
+    #     answer = "a = " + str(solutions["a"]) + ", b = " + str(solutions["b"])
+    #     all_data.append(question + "\n" + instruction + answer)
     
     return all_data
 
-my_list = generate_training_dataset(200)
+my_list = generate_training_dataset(400)
 
 # 将列表写入 JSON 文件
 # 将列表转换为一个字典，其中键是列名，值是列表
@@ -58,4 +60,4 @@ data_dict = {"text": my_list}
 dataset = Dataset.from_dict(data_dict)
 
 # 将Dataset对象保存为JSON Lines文件
-dataset.to_json('/home/qingyu_yin/project/pattern/data/ft_data.json', orient='records', lines=True)
+dataset.to_json('/home/qingyu_yin/project/pattern/data/ft_data_1k6.json', orient='records', lines=True)
