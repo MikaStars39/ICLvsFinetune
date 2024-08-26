@@ -38,7 +38,7 @@ def test_expression(
     shot_num: int = 5,
     generation_len: int = 3,
     need_false: bool = False,
-    need_print: bool = True,
+    need_print: bool = False,
 ):
 
     prompt = "Now you need to calculate the answer of some mathematic equations. Here are some examples: \n"
@@ -48,7 +48,7 @@ def test_expression(
     count_has_zero = 0
     count_no_zero = 0
 
-    for _ in tqdm(range(test_len)):
+    for _ in range(test_len):
         text_has_zero = prompt
         text_no_zero = prompt
         for __ in range(shot_num):
@@ -91,7 +91,7 @@ def test_expression(
 
 def test_code(
     model, tokenizer, precision,
-    test_len: int = 99,
+    test_len: int = 199,
     shot_num: int = 5,
     generation_len: int = 2,
     data_name_or_path: str = "data/code.json",
@@ -107,7 +107,7 @@ def test_code(
 
     dataset = load_dataset("json", data_files=data_name_or_path, split="train")
 
-    for pos in tqdm(range(test_len)):
+    for pos in range(test_len):
         text_has_zero = prompt
         real_result = None
         # text_no_zero = prompt
@@ -158,15 +158,15 @@ def test_code(
         # if str(result_has_zero) in outputs:
         #     count_no_zero += 1
 
-    print("shot num:", shot_num)
-    print(count_has_zero/test_len)
+    # print("shot num:", shot_num)
+    # print(count_has_zero/test_len)
     # print(count_no_zero/test_len)
     
     return count_has_zero/test_len
 
 def test_relation(
     model, tokenizer, precision,
-    test_len: int = 99,
+    test_len: int = 199,
     shot_num: int = 5,
     generation_len: int = 2,
     need_false: bool = False,
@@ -180,7 +180,7 @@ def test_relation(
     count_has_zero = 0
     count_no_zero = 0
 
-    for _ in tqdm(range(test_len)):
+    for _ in range(test_len):
         text_has_zero = prompt
 
         for __ in range(shot_num):
@@ -208,9 +208,9 @@ def test_relation(
             if str(answer) in outputs:
                 count_has_zero += 1
 
-    if need_print:
-        print("shot num:", shot_num)
-        print(count_has_zero/test_len)
+    # if need_print:
+    #     print("shot num:", shot_num)
+    #     print(count_has_zero/test_len)
     # print(count_no_zero/test_len)
 
     return count_has_zero/test_len
@@ -230,7 +230,7 @@ def test_bool(
     count_has_zero = 0
     # count_no_zero = 0
 
-    for _ in tqdm(range(test_len)):
+    for _ in range(test_len):
         text_has_zero = prompt
 
         for __ in range(shot_num):
@@ -257,9 +257,9 @@ def test_bool(
         if ('1' if answer else '0') in outputs:
             count_has_zero += 1
 
-    if need_print: 
-        print("shot num:", shot_num)
-        print(count_has_zero/test_len)
+    # if need_print: 
+    #     print("shot num:", shot_num)
+    #     print(count_has_zero/test_len)
     # print(count_no_zero/test_len)
 
     return count_has_zero/test_len
@@ -500,13 +500,23 @@ if __name__ == "__main__":
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
 
         with torch.no_grad():
-            for shot_num in [0, 1, 2, 4, 8, 16, 32]:
+            results = []
+            shot_num_list = [0, 1, 2, 4, 8, 16, 32] if "result" not in args.model_name_or_path else [0]
+            for shot_num in tqdm(shot_num_list):
                 if shot_num > args.shot_num:
                     break
-                test(
+                result = test(
                     model=model,
                     tokenizer=tokenizer,
                     precision=precision,
                     shot_num=shot_num,
                     need_false=args.need_false
                 )
+                results.append((shot_num, result))
+        
+        # print the result in format like shot_num, result
+        print("###########")
+        for shot_num, result in results:
+            print(shot_num, ":", result)
+        print("###########")
+
